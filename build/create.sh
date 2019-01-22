@@ -77,6 +77,7 @@ if [ "$LITE" = "y" ];then
 
   # Get any updates / install and remove pacakges
   chroot $MNT echo "docker-ce hold" | dpkg --set-selections
+  chroot $MNT dpkg --get-selections docker-ce
   chroot $MNT apt-get update
   chroot $MNT apt-get -y install vim byobu bridge-utils wiringpi screen minicom python-smbus
 
@@ -147,6 +148,9 @@ EOF
   chroot $MNT systemctl set-default multi-user.target
 
   # Enable Cluster HAT init
+  if [ ! -f $MNT/etc/rc.local ];then
+   printf "exit 0\n" > $MNT/etc/rc.local
+  fi
   sed -i "s#^exit 0#/sbin/clusterhat init\niptables -P FORWARD ACCEPT\nexit 0#" $MNT/etc/rc.local
 
   # Enable uart
