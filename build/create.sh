@@ -55,18 +55,30 @@ if [ "$LITE" = "y" ];then
   echo "Building LITE"
   echo " Copying source image"
   cp "$SOURCE/$VER-raspbian-stretch-lite.img" "$DEST/ClusterHAT-$VER-lite-$REV-controller.img"
+  truncate -s 2G "$DEST/ClusterHAT-$VER-lite-$REV-controller.img"
   LOOP=`losetup -f --show $DEST/ClusterHAT-$VER-lite-$REV-controller.img`
   sleep 5
+  parted -s $LOOP -- resizepart 2 -1s
   kpartx -av $LOOP
   sleep 5
 
-  mount `echo $LOOP|sed s#dev#dev/mapper#`p2 $MNT
-  mount `echo $LOOP|sed s#dev#dev/mapper#`p1 $MNT/boot
+  DEV=`echo $LOOP|sed s#dev#dev/mapper#`
+  PART1=${DEV}p1
+  PART2=${DEV}p2
+  PARTUUID=`sudo blkid $PART2 -s UUID | sed "s/.*UUID=\"\(.*\)\"/\1/"`
+  e2fsck -f $PART2
+  resize2fs $PART2
+  mount $PART2 $MNT
+  mount $PART1 $MNT/boot
+  mount -t proc proc $MNT/proc
+  mount -t sysfs sys $MNT/sys
+  mount --bind /dev $MNT/dev
+  mount --bind /dev/pts $MNT/dev/pts
 
   # Get any updates / install and remove pacakges
+  chroot $MNT echo "docker-ce hold" | dpkg --set-selections
   chroot $MNT apt-get update
-  chroot $MNT /bin/bash -c 'APT_LISTCHANGES_FRONTEND=none apt-get -y dist-upgrade'
-  chroot $MNT apt-get -y install bridge-utils wiringpi screen minicom python-smbus
+  chroot $MNT apt-get -y install vim byobu bridge-utils wiringpi screen minicom python-smbus
 
   # Setup ready for iptables for NAT for NAT/WiFi use
   # Preseed answers for iptables-persistent install
@@ -119,9 +131,15 @@ profile clusterhat_fallback_br0
 static ip_address=172.19.181.254/24
 
 interface usb0
+static ip_address=192.168.1.4 #ClusterHAT
+static routers=192.168.1.1
+static domain_name_servers=192.168.1.2
 fallback clusterhat_fallback_usb0
 
 interface br0
+static ip_address=192.168.1.3/24
+static routers=192.168.1.1
+static domain_name_servers=192.168.1.2
 fallback clusterhat_fallback_br0
 EOF
 
@@ -129,7 +147,7 @@ EOF
   chroot $MNT systemctl set-default multi-user.target
 
   # Enable Cluster HAT init
-  sed -i "s#^exit 0#/sbin/clusterhat init\nexit 0#" $MNT/etc/rc.local
+  sed -i "s#^exit 0#/sbin/clusterhat init\niptables -P FORWARD ACCEPT\nexit 0#" $MNT/etc/rc.local
 
   # Enable uart
   lua - enable_uart 1 $MNT/boot/config.txt <<EOF > $MNT/boot/config.txt.bak
@@ -200,7 +218,7 @@ EOF
    echo -e "# Load overlay to allow USB Gadget devices\n#dtoverlay=dwc2,dr_mode=peripheral" >> $MNT/boot/config.txt
   fi
 
-  PARTUUID=`sed "s/.*PARTUUID=\(.*\) rootfstype.*/\1/" $MNT/boot/cmdline.txt`
+  # PARTUUID=`sed "s/.*PARTUUID=\(.*\) rootfstype.*/\1/" $MNT/boot/cmdline.txt`
 
   # Copy PARTUUID to cmdline configs
   sed -i "s#/dev/mmcblk0p2#PARTUUID=$PARTUUID#" $MNT/usr/share/clusterhat/cmdline.*
@@ -209,6 +227,10 @@ EOF
   chroot $MNT apt-get -y autoremove --purge
   chroot $MNT apt-get clean
 
+  umount $MNT/dev/pts
+  umount $MNT/dev
+  umount $MNT/sys
+  umount $MNT/proc
   umount $MNT/boot
   umount $MNT
 
@@ -245,6 +267,7 @@ EOF
    mount `echo $LOOP|sed s#dev#dev/mapper#`p2 $MNT
    mount `echo $LOOP|sed s#dev#dev/mapper#`p1 $MNT/boot
    echo -n "dwc_otg.lpm_enable=0 console=serial0,115200 console=tty1 root=PARTUUID=$PARTUUID rootfstype=ext4 elevator=deadline fsck.repair=yes rootwait quiet init=/sbin/reconfig-clusterhat p1" > $MNT/boot/cmdline.txt
+   sed -i "s#^iptables -P FORWARD ACCEPT##" $MNT/etc/rc.local
    umount $MNT/boot
    umount $MNT
    kpartx -dv $LOOP
@@ -263,6 +286,7 @@ EOF
    mount `echo $LOOP|sed s#dev#dev/mapper#`p2 $MNT
    mount `echo $LOOP|sed s#dev#dev/mapper#`p1 $MNT/boot
    echo -n "dwc_otg.lpm_enable=0 console=serial0,115200 console=tty1 root=PARTUUID=$PARTUUID rootfstype=ext4 elevator=deadline fsck.repair=yes rootwait quiet init=/sbin/reconfig-clusterhat p2" > $MNT/boot/cmdline.txt
+   sed -i "s#^iptables -P FORWARD ACCEPT##" $MNT/etc/rc.local
    umount $MNT/boot
    umount $MNT
    kpartx -dv $LOOP
@@ -281,6 +305,7 @@ EOF
    mount `echo $LOOP|sed s#dev#dev/mapper#`p2 $MNT
    mount `echo $LOOP|sed s#dev#dev/mapper#`p1 $MNT/boot
    echo -n "dwc_otg.lpm_enable=0 console=serial0,115200 console=tty1 root=PARTUUID=$PARTUUID rootfstype=ext4 elevator=deadline fsck.repair=yes rootwait quiet init=/sbin/reconfig-clusterhat p3" > $MNT/boot/cmdline.txt
+   sed -i "s#^iptables -P FORWARD ACCEPT##" $MNT/etc/rc.local
    umount $MNT/boot
    umount $MNT
    kpartx -dv $LOOP
@@ -299,6 +324,7 @@ EOF
    mount `echo $LOOP|sed s#dev#dev/mapper#`p2 $MNT
    mount `echo $LOOP|sed s#dev#dev/mapper#`p1 $MNT/boot
    echo -n "dwc_otg.lpm_enable=0 console=serial0,115200 console=tty1 root=PARTUUID=$PARTUUID rootfstype=ext4 elevator=deadline fsck.repair=yes rootwait quiet init=/sbin/reconfig-clusterhat p4" > $MNT/boot/cmdline.txt
+   sed -i "s#^iptables -P FORWARD ACCEPT##" $MNT/etc/rc.local
    umount $MNT/boot
    umount $MNT
    kpartx -dv $LOOP

@@ -65,7 +65,9 @@ if [ ! -z $1 ];then
    sed -i "s/^#dtoverlay=dwc2.*$/dtoverlay=dwc2,dr_mode=peripheral/" /boot/config.txt
    echo "$1" > /etc/hostname
    IP=$(echo $1|tr -d 'p')
+   ZEROIP=$(($IP + 3))
    sed -i "s~^static ip_address=172.19.181.*/24 #ClusterHAT~static ip_address=172.19.181.$IP/24 #ClusterHAT~" /etc/dhcpcd.conf
+   sed -i "s~^static ip_address=192.168.1.*/24 #ClusterHAT~static ip_address=192.168.1.$ZEROIP/24 #ClusterHAT~" /etc/dhcpcd.conf
    ln -fs /lib/systemd/system/getty@.service \
     /etc/systemd/system/getty.target.wants/getty@ttyGS0.service
   fi
