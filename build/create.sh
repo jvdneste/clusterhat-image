@@ -65,7 +65,7 @@ if [ "$LITE" = "y" ];then
   DEV=`echo $LOOP|sed s#dev#dev/mapper#`
   PART1=${DEV}p1
   PART2=${DEV}p2
-  PARTUUID=`sudo blkid $PART2 -s UUID | sed "s/.*UUID=\"\(.*\)\"/\1/"`
+  PARTUUID=`sudo blkid $PART2 -s PARTUUID | sed "s/.*PARTUUID=\"\(.*\)\"/\1/"`
   e2fsck -f $PART2
   resize2fs $PART2
   mount $PART2 $MNT
@@ -76,9 +76,10 @@ if [ "$LITE" = "y" ];then
   mount --bind /dev/pts $MNT/dev/pts
 
   # Get any updates / install and remove pacakges
-  chroot $MNT echo "docker-ce hold" | dpkg --set-selections
+  chroot $MNT echo "docker-ce hold" | chroot $MNT dpkg --set-selections
   chroot $MNT dpkg --get-selections docker-ce
   chroot $MNT apt-get update
+  chroot $MNT apt-get -y upgrade
   chroot $MNT apt-get -y install vim byobu bridge-utils wiringpi screen minicom python-smbus
 
   # Setup ready for iptables for NAT for NAT/WiFi use
@@ -132,7 +133,7 @@ profile clusterhat_fallback_br0
 static ip_address=172.19.181.254/24
 
 interface usb0
-static ip_address=192.168.1.4 #ClusterHAT
+static ip_address=192.168.1.4/24 #ClusterHAT
 static routers=192.168.1.1
 static domain_name_servers=192.168.1.2
 fallback clusterhat_fallback_usb0
@@ -150,6 +151,7 @@ EOF
   # Enable Cluster HAT init
   if [ ! -f $MNT/etc/rc.local ];then
    printf "exit 0\n" > $MNT/etc/rc.local
+   chmod a+x $MNT/etc/rc.local
   fi
   sed -i "s#^exit 0#/sbin/clusterhat init\niptables -P FORWARD ACCEPT\nexit 0#" $MNT/etc/rc.local
 
@@ -226,6 +228,8 @@ EOF
 
   # Copy PARTUUID to cmdline configs
   sed -i "s#/dev/mmcblk0p2#PARTUUID=$PARTUUID#" $MNT/usr/share/clusterhat/cmdline.*
+
+  chroot $MNT systemctl enable kubelet
 
   rm -f $MNT/etc/ssh/*key*
   chroot $MNT apt-get -y autoremove --purge
