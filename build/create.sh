@@ -85,9 +85,10 @@ if [ "$LITE" = "y" ];then
   curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | chroot $MNT apt-key add -
   echo "deb http://apt.kubernetes.io/ kubernetes-xenial main" | chroot $MNT tee /etc/apt/sources.list.d/kubernetes.list
 
+  chroot $MNT apt update
+  chroot $MNT apt -y install docker-ce=18.06.1~ce~3-0~raspbian
   chroot $MNT apt-mark hold docker-ce raspberrypi-kernel
 
-  chroot $MNT apt update
   chroot $MNT apt -y upgrade
   
   chroot $MNT apt update
