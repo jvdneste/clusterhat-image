@@ -75,12 +75,28 @@ if [ "$LITE" = "y" ];then
   mount --bind /dev $MNT/dev
   mount --bind /dev/pts $MNT/dev/pts
 
+  # fix ping permissions
+  chroot $MNT chmod u+s /bin/ping
+
   # Get any updates / install and remove pacakges
-  chroot $MNT echo "docker-ce hold" | chroot $MNT dpkg --set-selections
-  chroot $MNT dpkg --get-selections docker-ce
-  chroot $MNT apt-get update
-  chroot $MNT apt-get -y upgrade
-  chroot $MNT apt-get -y install vim byobu bridge-utils wiringpi screen minicom python-smbus
+  
+  chroot $MNT apt update
+
+  curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | chroot $MNT apt-key add -
+  echo "deb http://apt.kubernetes.io/ kubernetes-xenial main" | chroot $MNT tee /etc/apt/sources.list.d/kubernetes.list
+
+  chroot $MNT apt-mark hold docker-ce raspberrypi-kernel
+
+  chroot $MNT apt update
+  chroot $MNT apt -y upgrade
+  
+  chroot $MNT apt update
+  chroot $MNT apt -y install bridge-utils wiringpi screen minicom python-smbus
+
+  chroot $MNT apt -y install kubeadm
+
+  chroot $MNT apt-mark hold kubeadm kubectl kubelet
+  chroot $MNT dpkg --get-selections docker-ce raspberrypi-kernel
 
   # Setup ready for iptables for NAT for NAT/WiFi use
   # Preseed answers for iptables-persistent install
